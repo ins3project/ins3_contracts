@@ -28,6 +28,8 @@ interface IIns3ProductToken{
     function calcDistributePremiums() external view returns(uint256,uint256);
     function approvePaid() external;
     function rejectPaid() external;
+    function transfer(address recipient, uint256 amount) external returns (bool);
+    function transferFrom(address sender, address recipient, uint256 amount) external returns (bool);
 }
 
 
@@ -52,4 +54,22 @@ interface IStakingPool
     function takeTokenHolder(uint256 tokenId) external;
     function productToken() external view returns(IIns3ProductToken);
     function queryAndCheckClaimAmount(address userAccount) view external returns(uint256,uint256/*token balance*/);
+}
+
+interface IClaimPool is IStakingPool
+{
+    function tokenAddress() external view returns(address);
+    function returnRemainingAToken(address account) external;
+    function getAToken(uint256 userPayAmount, address account) external;
+    function needPayFlag() external view returns(bool); 
+    function totalClaimProductQuantity() external view returns(uint256);
+}
+
+interface IStakingPoolToken{
+    function putTokenHolderInPool(uint256 tokenId,uint256 amount) external;
+    function getTokenHolderAmount(uint256 tokenId,address poolAddr) view external returns(uint256);
+    function getTokenHolder(uint256 tokenId) view external returns(uint256,uint256,uint256,uint256,address [] memory);
+    function coinHolderRemainingPrincipal(uint256 tokenId) view external returns(uint256);
+    function bookkeepingFromPool(uint256 amount) external;
+    function isTokenExist(uint256 tokenId) view external returns(bool);
 }
