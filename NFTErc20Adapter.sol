@@ -15,10 +15,13 @@
 pragma solidity >=0.6.0 <0.7.0;
 
 import "./@openzeppelin/math/SafeMath.sol";
-import "./IUpgradable.sol";
+import "./@openzeppelin/math/Math.sol";
 import "./@openzeppelin/token/ERC20/ERC20Burnable.sol";
 import "./@openzeppelin/token/ERC721/ERC721.sol";
+import "./@openzeppelin/utils/EnumerableMap.sol";
 
+import "./IStakingPool.sol";
+import "./IUpgradable.sol";
 
 interface NFTValuable{
     function getTokenHolder(uint256 tokenId) view external returns(uint256,uint256,uint256,uint256,address [] memory);
@@ -29,31 +32,37 @@ interface NFTValuableV2 is NFTValuable{
 }
 
 
-struct NFTKey
-{
-    address NFTContractAddress;
-    uint256 tokenId;
-}
 
 
 contract IERC20Token is ERC20Burnable, IUpgradable{
 
     mapping(address=>bool) public minerMap;
 
-    constructor(string memory name,string memory symbol) public
-        ERC20(name,symbol)
+   mapping(address=>bool) _allowedAddress;
+
+    constructor(string memory name, string memory symbol, address ownable) public
+        ERC20(name,symbol) IUpgradable()
     {
+        setOwnable(ownable);
+    }
+
+    function updateDependentContractAddress() public virtual override{
 
     }
 
-    function  updateDependentContractAddress() public virtual override{
+    modifier checkAllowed(address sender,address recipient) {
+        require(_allowedAddress[sender]==true || _allowedAddress[recipient]==true,"Do not transfer at will");
+        _;
+    }
 
-    } 
+    function addAllowedRecipient(address recipient) public onlyOwner{
+        _allowedAddress[recipient]=true;
+    }
 
-   
     function addMiners(address[] memory miners) public onlyOwner{
         for(uint256 i=0; i<miners.length; i++) {
             minerMap[miners[i]] = true;
+            _allowedAddress[miners[i]]=true;
         }
     }
 
@@ -72,33 +81,51 @@ contract IERC20Token is ERC20Burnable, IUpgradable{
         _mint(account, amount);
     }
 
+    function _transfer(address sender, address recipient, uint256 amount) checkAllowed(sender,recipient) internal  override {
+        super._transfer(sender,recipient,amount);
+    }
+
+
 }
 
 contract NFTErc20Adapter is IUpgradable{
     using SafeMath for uint256;
 
-    mapping(string=>address) public iERC20Tokens;
-    mapping(address/* user */=>NFTKey[])  public nftKeys;
+    using EnumerableMap for EnumerableMap.UintToUintMap;
+
+    mapping(string/*tokenName*/=>mapping(uint256/*expireTimestamp*/=>address)) public iERC20Tokens;
+    mapping(address/* user */ => mapping(address /* NFTContractAddress */=> EnumerableMap.UintToUintMap/*tokenId=>iTokenAmount*/))   nftKeys;
 
     mapping (address=>string/* tokenName */) public validNFTContracts;
+    address [] public NFTContractsList;
 
-    constructor() public{
+
+    constructor(address ownable) IUpgradable() public {
+        setOwnable(ownable);
     }
 
-    function  updateDependentContractAddress() public virtual override{
+    function updateDependentContractAddress() public virtual override{
 
     } 
 
-    function registerIERC20Token(address iERC20TokenAddress,string memory tokenName) onlyOwner public{
-        require(iERC20Tokens[tokenName]==address(0),"The iERC20token exists");
-        iERC20Tokens[tokenName]=iERC20TokenAddress;
-        address[] memory miners = new address[](1);
-        miners[0] = address(this);
-        IERC20Token(iERC20TokenAddress).addMiners(miners);
+    function registerIERC20Token(address iERC20TokenAddress,string memory tokenName,uint256 expireTime) onlyOwner public{
+        require(iERC20Tokens[tokenName][expireTime]==address(0),"The iERC20token exists");
+        iERC20Tokens[tokenName][expireTime]=iERC20TokenAddress;
     }
 
+    function getIERC20Token(address NFTContract,uint256 tokenId) view public returns(address){
+        string memory capitalTokenName=getNFTCapitalTokenName(NFTContract,tokenId);
+        require(!checkString(capitalTokenName,""),"Invalid NFT contract");
+
+        uint256 expireTimestamp=getNFTExpireTimestamp(NFTContract,tokenId);
+        require(expireTimestamp>0,"Invalid NFT contract expire time");
+        return iERC20Tokens[capitalTokenName][expireTimestamp];
+    }
 
     function registerNFTContract(address NFTContract,string memory capitalTokenName) onlyOwner public {
+        if (checkString(validNFTContracts[NFTContract],"")){
+            NFTContractsList.push(NFTContract);
+        }
         validNFTContracts[NFTContract]=capitalTokenName;
     }
 
@@ -115,45 +142,96 @@ contract NFTErc20Adapter is IUpgradable{
         return capitalTokenName;
     }
 
-    function pledgeNFT(address NFTContract,uint256 tokenId) public {
-        require(ERC721(NFTContract).ownerOf(tokenId)==_msgSender(),"Sender is not owner");
-        string memory capitalTokenName=getNFTCapitalTokenName(NFTContract,tokenId);
-        require(!checkString(capitalTokenName,""),"Invalid NFT contract");
-        IERC20Token iToken=IERC20Token(iERC20Tokens[capitalTokenName]);
-        require(address(iToken)!=address(0),"Unknown capital token name");
+    function getNFTExpireTimestamp(address NFTContract,uint256 tokenId) view public returns(uint256){
         NFTValuable nft=NFTValuable(NFTContract);
-        ERC721(NFTContract).transferFrom(_msgSender(),address(this),tokenId);
+        (,,,,address [] memory pools)=nft.getTokenHolder(tokenId);
+        uint256 recentTime=0;
+        for( uint256 i=0;i<pools.length;++i){
+            uint256 ts=IStakingPool(pools[i]).productToken().expireTimestamp();
+            recentTime = recentTime==0?ts:Math.min(recentTime,ts);
+        }
+        return recentTime;
+    }
+
+    function getNFTValueWeight(address NFTContract,uint256 tokenId) view public returns(uint256){
+
+        NFTValuable nft=NFTValuable(NFTContract);
+        (,,,,address [] memory pools)=nft.getTokenHolder(tokenId);
+
+        string memory capitalTokenName=validNFTContracts[NFTContract];
+        bool isV2=checkString(capitalTokenName,"*");
+        if (isV2){
+            uint256 weightSum=0;
+            uint256 maxWeight=0;
+            for( uint256 i=0;i<pools.length;++i){
+                uint256 weight=IClaimPool(pools[i]).stakingWeight(); //based on 10000
+                weightSum=weightSum.add(weight);
+                maxWeight=Math.max(weight,maxWeight);
+            }
+            return Math.max(weightSum.mul(9).div(pools.length.add(8)),maxWeight);  //=max(9/(n+8)*sum,max(weight))
+        }else{
+            return pools.length.mul(10000).mul(9).div(pools.length.add(8));  //=9/(n+8)
+        }
+
+    }
+
+
+    function NFTOfOwnerByIndex(address owner, address NFTContract,uint256 index) view public returns (uint256) {
+        (uint256 tokenId,)=nftKeys[owner][NFTContract].at(index);
+        return tokenId;
+    }
+    function NFTBalanceOf(address owner, address NFTContract) view public returns (uint256) {
+        return nftKeys[owner][NFTContract].length();
+    }
+
+    function getIERC20BalanceOf(address NFTContract,uint256 tokenId) view public returns(uint256){
+        NFTValuable nft=NFTValuable(NFTContract);
         (uint256 value,,,,)=nft.getTokenHolder(tokenId);
+
+        uint256 weight=getNFTValueWeight(NFTContract,tokenId);
+        assert(weight<=10000);
+        return value.mul(weight).div(10000) ;
+    }
+
+
+    function pledgeNFT(address NFTContract,uint256 tokenId) public {
+        require(ERC721(NFTContract).ownerOf(tokenId)==_msgSender(),"Not owner");
+
+        address iTokenAddress = getIERC20Token(NFTContract, tokenId);
+        IERC20Token iToken=IERC20Token(iTokenAddress);
+        require(address(iToken)!=address(0),"Unknown capital token name");
+
+        uint256 value=getIERC20BalanceOf(NFTContract,tokenId);
+        require(value>0,"NFT capital value is 0");
+        ERC721(NFTContract).transferFrom(_msgSender(),address(this),tokenId);
         iToken.mint(_msgSender(),value);
-        nftKeys[_msgSender()].push(NFTKey(NFTContract,tokenId));
+
+        nftKeys[_msgSender()][NFTContract].set(tokenId,value);
+
     }
 
     function isNFTOwner(address NFTContract,uint256 tokenId,address owner) view public returns(bool){
-        NFTKey[] storage keys=nftKeys[owner];
-        for (uint256 i=0;i<keys.length;++i){
-            NFTKey storage key=keys[i];
-            if (key.NFTContractAddress==NFTContract && key.tokenId==tokenId){
-                return true;
-            }
-        }
-        return false;
+        return nftKeys[owner][NFTContract].contains(tokenId);
     }
 
     function redeemNFT(address NFTContract,uint256 tokenId) public {
-        require(isNFTOwner(NFTContract,tokenId,_msgSender()));
+        require(isNFTOwner(NFTContract,tokenId,_msgSender()),"Not owner");
 
         string memory capitalTokenName=getNFTCapitalTokenName(NFTContract,tokenId);
         require(!checkString(capitalTokenName,""),"Invalid NFT contract");
 
-        NFTValuable nft=NFTValuable(NFTContract);
-        (uint256 iTokenAmount,,,,)=nft.getTokenHolder(tokenId);
+        uint256 expireTimestamp=getNFTExpireTimestamp(NFTContract,tokenId);
+        require(expireTimestamp>0,"Invalid NFT contract expire time");
 
-        IERC20Token iToken=IERC20Token(iERC20Tokens[capitalTokenName]);
+        IERC20Token iToken=IERC20Token(iERC20Tokens[capitalTokenName][expireTimestamp]);
         require(address(iToken)!=address(0),"Unknown capital token name");
-        require(iToken.balanceOf(_msgSender())>=iTokenAmount,"Not enought iToken");
+
+        uint256 iTokenAmount=nftKeys[_msgSender()][NFTContract].get(tokenId);
+
         iToken.transferFrom(_msgSender(),address(this),iTokenAmount);
         iToken.burn(iTokenAmount);
         ERC721(NFTContract).transferFrom(address(this),_msgSender(),tokenId);
+        nftKeys[_msgSender()][NFTContract].remove(tokenId);
     }
 
 }

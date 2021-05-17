@@ -63,6 +63,8 @@ interface IClaimPool is IStakingPool
     function getAToken(uint256 userPayAmount, address account) external;
     function needPayFlag() external view returns(bool); 
     function totalClaimProductQuantity() external view returns(uint256);
+
+    function stakingWeight() external view returns(uint256);
 }
 
 interface IStakingPoolToken{

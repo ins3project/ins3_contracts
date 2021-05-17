@@ -34,7 +34,7 @@ contract Ins3ProductTokenV2 is Ins3ProductTokenBaseV2
 	}
 
 
-	function buy(bytes8 coinName,address priceNodePublicKey, uint256 quantity, uint256 price, 
+	function buy(bytes8 ,address priceNodePublicKey, uint256 quantity, uint256 price,
                 uint256 expiresAt, uint8 _v, bytes32 _r, bytes32 _s) whenNotPaused public returns(bool) { //TODO coinName
         address erc20Token = stakingPool.tokenAddress();
         uint256 amount = erc20Token.getCleanAmount(price.mul(quantity));
