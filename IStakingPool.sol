@@ -65,6 +65,7 @@ interface IClaimPool is IStakingPool
     function totalClaimProductQuantity() external view returns(uint256);
 
     function stakingWeight() external view returns(uint256);
+    function stakingLeverageWeight() external view returns(uint256);
 }
 
 interface IStakingPoolToken{

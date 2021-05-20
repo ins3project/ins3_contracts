@@ -221,16 +221,21 @@ contract StakingPoolTokenV2 is ERC721, IUpgradable, ReentrancyGuard
 
     function checkPoolsAmounts(address [] memory pools/*, uint256 []  memory amounts, uint256 amount,uint256 maxAmount*/) view public returns(bool){ 
         require(pools.length>0 && pools.length<=_priceMetaInfoDb.STAKING_TOKEN_MARGIN(),"pool length error");
-        
+
         IClaimPool pool1=IClaimPool(pools[0]);
         uint256 expireTimestamp = pool1.productTokenExpireTimestamp();
         address tokenAddress = pool1.tokenAddress();
+        uint256 leverageWeightSum=0;
+        uint256 stakingMargin=_priceMetaInfoDb.STAKING_TOKEN_MARGIN().mul(10000);
         for (uint256 i=0;i<pools.length;++i){
             address addr=pools[i];
             IClaimPool pool=IClaimPool(addr);
             require(isPool(addr),"all pools should be registered");
             require(pool.productTokenExpireTimestamp()==expireTimestamp,"pool expire time error");
             require(pool.tokenAddress()==tokenAddress,"pool address not same");
+
+            leverageWeightSum=leverageWeightSum.add(pool.stakingLeverageWeight());
+            require(leverageWeightSum<=stakingMargin,"out of leverage weight");
 
         }
         return true;
@@ -301,7 +306,8 @@ contract StakingPoolTokenV2 is ERC721, IUpgradable, ReentrancyGuard
             return 0;
         } else{
             uint256 stakingAmount = getTokenHolderAmount(tokenId, poolAddr);
-            return poolPayAmount.mul(stakingAmount).div(totalPayAmount);
+            uint256 poolPayAmount2 = poolPayAmount.mul(stakingAmount).div(totalPayAmount);
+            return Math.min(poolPayAmount2, poolPayAmount);
         }
     }
 

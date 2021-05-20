@@ -27,8 +27,14 @@ abstract contract Ins3ProductTokenBaseV2 is ERC20,IUpgradable
 
 	uint256 public expireTimestamp; 
 
+	uint256 private _closureTimestamp;
+
 	function closureTimestamp() view public returns(uint256){ 
-		return expireTimestamp-_priceMetaInfoDb.ORACLE_VALID_PERIOD();
+		if(_closureTimestamp>0){
+			return _closureTimestamp;
+		}else {
+			return expireTimestamp-_priceMetaInfoDb.ORACLE_VALID_PERIOD();
+		}
 	}
 	bool public isValid; 
 
@@ -65,6 +71,11 @@ abstract contract Ins3ProductTokenBaseV2 is ERC20,IUpgradable
 
     }
 
+
+	function setClosureTimestamp(uint256 timestamp) external onlyOwner{
+		require(timestamp < expireTimestamp);
+		_closureTimestamp = timestamp;
+	}
 
     function updateDependentContractAddress() public virtual override {
 		stakingPoolToken = register.getContract("SKPT");

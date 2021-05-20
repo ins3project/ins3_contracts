@@ -28,7 +28,7 @@ interface NFTValuable{
 }
 
 interface NFTValuableV2 is NFTValuable{
-    function capitalToken(uint256 tokenId) view external returns(address);
+    function capitalTokenAddress(uint256 tokenId) view external returns(address);
 }
 
 
@@ -38,7 +38,7 @@ contract IERC20Token is ERC20Burnable, IUpgradable{
 
     mapping(address=>bool) public minerMap;
 
-   mapping(address=>bool) _allowedAddress;
+    mapping(address=>bool) _allowedAddress;
 
     constructor(string memory name, string memory symbol, address ownable) public
         ERC20(name,symbol) IUpgradable()
@@ -99,8 +99,12 @@ contract NFTErc20Adapter is IUpgradable{
     mapping (address=>string/* tokenName */) public validNFTContracts;
     address [] public NFTContractsList;
 
+    uint256 public weightNumeratorFactor;
+    uint256 public weightDenominatorFactor;
 
     constructor(address ownable) IUpgradable() public {
+        weightNumeratorFactor=9;
+        weightDenominatorFactor=8;
         setOwnable(ownable);
     }
 
@@ -108,8 +112,18 @@ contract NFTErc20Adapter is IUpgradable{
 
     } 
 
+    function setWeightFactor(uint256 numerator,uint256 denominator) public onlyOwner{
+        weightNumeratorFactor=numerator;
+        weightDenominatorFactor=denominator;
+    }
+
+    function calcWeightFactor(uint256 n,uint256 weightRadix) view public returns(uint256){
+        return weightRadix.mul(weightNumeratorFactor).div(n.add(weightDenominatorFactor));
+    }
+
     function registerIERC20Token(address iERC20TokenAddress,string memory tokenName,uint256 expireTime) onlyOwner public{
-        require(iERC20Tokens[tokenName][expireTime]==address(0),"The iERC20token exists");
+        require(IERC20Token(iERC20TokenAddress).minerMap(address(this)),"The iToken should add this as minter");
+        require(iERC20Tokens[tokenName][expireTime]==address(0),"The iToken exists");
         iERC20Tokens[tokenName][expireTime]=iERC20TokenAddress;
     }
 
@@ -136,7 +150,7 @@ contract NFTErc20Adapter is IUpgradable{
     function getNFTCapitalTokenName(address NFTContract,uint256 tokenId) view public returns(string memory){
         string memory capitalTokenName=validNFTContracts[NFTContract];
         if (checkString(capitalTokenName,"*")){
-            ERC20 capToken=ERC20(NFTValuableV2(NFTContract).capitalToken(tokenId));
+            ERC20 capToken=ERC20(NFTValuableV2(NFTContract).capitalTokenAddress(tokenId));
             capitalTokenName=capToken.symbol();
         }
         return capitalTokenName;
@@ -168,9 +182,9 @@ contract NFTErc20Adapter is IUpgradable{
                 weightSum=weightSum.add(weight);
                 maxWeight=Math.max(weight,maxWeight);
             }
-            return Math.max(weightSum.mul(9).div(pools.length.add(8)),maxWeight);  //=max(9/(n+8)*sum,max(weight))
+            return Math.max(calcWeightFactor(pools.length,weightSum),maxWeight);  //=max(9/(n+8)*sum,max(weight))
         }else{
-            return pools.length.mul(10000).mul(9).div(pools.length.add(8));  //=9/(n+8)
+            return calcWeightFactor(pools.length,pools.length.mul(10000));  //=9/(n+8)*1
         }
 
     }

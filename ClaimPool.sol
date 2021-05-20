@@ -17,31 +17,16 @@ pragma solidity >=0.6.0 <0.7.0;
 import "./IStakingPool.sol";
 import "./PriceMetaInfoDB.sol";
 import "./IUpgradable.sol";
-import "./@openzeppelin/token/ERC20/IERC20.sol";
-import "./@openzeppelin/token/ERC20/SafeERC20.sol";
 import "./@openzeppelin/math/SafeMath.sol";
 import "./@openzeppelin/math/Math.sol";
 import "./@openzeppelin/utils/ReentrancyGuard.sol";
 import "./CompatibleERC20.sol";
 
-contract ClaimPool is IClaimPool, IUpgradable, ReentrancyGuard
+contract StakingPoolV2 is IClaimPool, IUpgradable, ReentrancyGuard
 {
-    using SafeERC20 for IERC20;
     using SafeMath for uint256;
     using CompatibleERC20 for address;
-
-    mapping(address => uint256) public userClaimMap;
-    uint256 public override totalClaimProductQuantity;
-
-    uint256 public claimRate;
-
-    uint256 public aTokenClaimFee;
-
-    uint256 public aTokenRate;
-
     address public override tokenAddress;
-    address public aTokenAddress;
-
 
     uint256 [] public tokenHolderIds;  
 
@@ -75,35 +60,26 @@ contract ClaimPool is IClaimPool, IUpgradable, ReentrancyGuard
 
     uint256 public override stakingWeight;
 
-    constructor(uint256 stakingAmountLimit_, uint256 minStakingAmount_, uint256 capacityLimitPercent_, uint256 claimRate_, uint256 aTokenClaimFee_, uint256 aTokenRate_, address tokenAddress_, address aTokenAddress_) public{
+    uint256 public override stakingLeverageWeight;
+
+    constructor(uint256 stakingAmountLimit_, uint256 minStakingAmount_, uint256 capacityLimitPercent_, address tokenAddress_) public{
         stakingAmountLimit = stakingAmountLimit_;
         minStakingAmount = minStakingAmount_;
         capacityLimitPercent = capacityLimitPercent_;
-        claimRate = claimRate_;
 
-        require(aTokenClaimFee_ < 10000, "claim fee error");
-        aTokenClaimFee = aTokenClaimFee_;
-        aTokenRate = aTokenRate_;
         tokenAddress = tokenAddress_;
-        aTokenAddress = aTokenAddress_;
 
         stakingWeight=10000;
+        stakingLeverageWeight=10000;
 
-    }
-
-    function setClaimRate(uint256 claimRate_) onlyOwner public{
-        require(claimRate_>0 && claimRate_<=100,"claim rate error");
-        require(now < startTime(),"can not set rate");
-        claimRate = claimRate_;
-	}
-
-    function setATokenRate(uint256 aTokenRate_) onlyOwner public{
-        require(now < startTime(),"can not set rate");
-        aTokenRate =  aTokenRate_;
     }
 
     function setStakingWeight(uint256 stakingWeight_) onlyOwner public{
         stakingWeight=stakingWeight_;
+    }
+
+    function setStakingLeverageWeight(uint256 stakingLeverageWeight_) onlyOwner public {
+        stakingLeverageWeight=stakingLeverageWeight_;
     }
 
     function setNeedPayFlag(bool needPay) onlyOwner public{
@@ -119,61 +95,8 @@ contract ClaimPool is IClaimPool, IUpgradable, ReentrancyGuard
         return productToken.expireTimestamp();
     }
 
-    function claimStandardReached() view public returns(bool) {
-        return totalClaimProductQuantity.mul(100).div(productToken.totalSellQuantity())>=claimRate;
-    }
-
-    function redeemFromClaim() nonReentrant whenNotPaused external {
-        require(!_isClosed || !productToken.needPay(),"can not redeemFromClaim");
-
-        uint256 productQuantity = userClaimMap[_msgSender()];
-        if(productQuantity > 0) {
-            uint256 aTokenAmount = calcATokenAmount(productQuantity.mul(productToken.paid())); //TODO
-            aTokenAddress.transferERC20(_msgSender(), aTokenAmount);
-            productToken.transfer(_msgSender(), productQuantity);
-            totalClaimProductQuantity = totalClaimProductQuantity.sub(productQuantity);
-            userClaimMap[_msgSender()] = 0;
-        }
-    }
-
-    function calcATokenAmount(uint256 totalPaidAmount) view public returns(uint256) {
-        return (totalPaidAmount.mul(aTokenRate).div(1e18)).mul(aTokenClaimFee.add(10000)).div(10000);
-    }
-
-    function pledgeForClaim(uint256 productQuantity, uint256 aTokenAmount) nonReentrant whenNotPaused external {
-        require(!_isClosed,"Staking pool has been closed");
-        require(startTime()>=now,"It hasn't started");
-        require(executeTime()<now,"can not pledge");
-
-        uint256 checkAmount = calcATokenAmount(productQuantity.mul(productToken.paid()));
-        require(checkAmount == aTokenAmount,"invalid cover amount");
-        aTokenAddress.transferFromERC20(_msgSender(), address(this), aTokenAmount);
-        productToken.transferFrom(_msgSender(), address(this), productQuantity);
-        userClaimMap[_msgSender()] = userClaimMap[_msgSender()].add(productQuantity);
-        totalClaimProductQuantity = totalClaimProductQuantity.add(productQuantity);
-    }
-
-    function returnRemainingAToken(address userAccount) onlyPoolToken nonReentrant whenNotPaused public override {
-        uint256 totalRealPayAmount = totalClaimProductQuantity.mul(payAmount());
-        uint256 totalNeedPayAmount = totalClaimProductQuantity.mul(productToken.paid());
-        if(totalRealPayAmount < totalNeedPayAmount) {
-            uint256 totalLeftATokenAmount = calcATokenAmount(totalNeedPayAmount.sub(totalRealPayAmount));
-            uint256 claimQuantity = userClaimMap[userAccount];
-            uint256 aTokenAmount = totalLeftATokenAmount.mul(claimQuantity).div(totalClaimProductQuantity);
-            if(aTokenAmount>0){
-                aTokenAddress.transferERC20(_msgSender(), aTokenAmount);
-            }
-        }
-        userClaimMap[userAccount] = 0;
-    }
-
-    function getAToken(uint256 userPayAmount, address userAccount) onlyPoolToken nonReentrant whenNotPaused public override {
-        uint256 totalPayAmount = totalRealPayFromStaking();
-        uint256 totalATokenAmount = calcATokenAmount(totalClaimProductQuantity.mul(payAmount()));
-        uint256 aTokenAmount = totalATokenAmount.mul(userPayAmount).div(totalPayAmount);
-        if(aTokenAmount>0){
-            aTokenAddress.transferERC20(userAccount, aTokenAmount);
-        }
+    function totalClaimProductQuantity() view public virtual override returns(uint256){
+        return productToken.totalSellQuantity();
     }
 
     function calculateCapacity() view public override returns(uint256) {
@@ -236,7 +159,7 @@ contract ClaimPool is IClaimPool, IUpgradable, ReentrancyGuard
         return stakingAmountLimit.sub(_totalStakingAmount);
     }
 
-    function  updateDependentContractAddress() public override{
+    function updateDependentContractAddress() public override{
         stakingPoolToken=IStakingPoolToken(register.getContract("SKPT"));
         require(address(stakingPoolToken)!=address(0),"updateDependentContractAddress - staking pool token does not init");
     }
@@ -289,7 +212,7 @@ contract ClaimPool is IClaimPool, IUpgradable, ReentrancyGuard
             require(!needPayFlag,"flag error");
             productToken.rejectPaid();
         }
-        uint256 totalSellQuantity = totalClaimProductQuantity;
+        uint256 totalSellQuantity = totalClaimProductQuantity();
 
         if(needPay && totalSellQuantity>0) { 
             uint256 totalPaidAmount = totalSellQuantity.mul(productToken.paid());
@@ -336,7 +259,8 @@ contract ClaimPool is IClaimPool, IUpgradable, ReentrancyGuard
             return 0;
         } else{
             uint256 stakingAmount = stakingPoolToken.getTokenHolderAmount(tokenId, poolAddr);
-            return poolPayAmount.mul(stakingAmount).div(totalPayAmount);
+            uint256 poolPayAmount2 = poolPayAmount.mul(stakingAmount).div(totalPayAmount);
+            return Math.min(poolPayAmount2, poolPayAmount);
         }
     }
 
@@ -363,7 +287,7 @@ contract ClaimPool is IClaimPool, IUpgradable, ReentrancyGuard
         require(_isClosed,"Pool must be closed");
         require(!claimEnable,"claim already enable");
         uint256 totalAmount = tokenAddress.balanceOfERC20(address(this));
-        uint256 totalSellQuantity = totalClaimProductQuantity;
+        uint256 totalSellQuantity = totalClaimProductQuantity();
         if(totalSellQuantity>0) {
             _payAmount = totalAmount.add(_totalRealPayFromStaking).add(_totalPremiumsAfterClose).div(totalSellQuantity);
         }else {
@@ -382,10 +306,122 @@ contract ClaimPool is IClaimPool, IUpgradable, ReentrancyGuard
         claimEnable = true;
     }
 
-    function queryAndCheckClaimAmount(address userAccount) view external override returns(uint256,uint256/*token balance*/){
+    function queryAndCheckClaimAmount(address userAccount) view external virtual override returns(uint256,uint256/*token balance*/){
+        require(claimEnable,"claim not enable");
+        require(payAmount()>0,"no money for claim");
+        uint256 productTokenQuantity = productToken.balanceOf(userAccount);
+        return (productTokenQuantity.mul(payAmount()),productTokenQuantity);
+    }
+
+    function returnRemainingAToken(address userAccount) onlyPoolToken nonReentrant whenNotPaused public virtual override {
+        
+    }
+
+    function getAToken(uint256 userPayAmount, address userAccount) onlyPoolToken nonReentrant whenNotPaused public virtual override {
+        
+    }
+}
+
+contract ClaimPool is StakingPoolV2
+{
+    mapping(address => uint256) public userClaimMap;
+
+    uint256 private _totalClaimProductQuantity;
+
+    uint256 public claimRate;
+
+    uint256 public aTokenClaimFee;
+
+    uint256 public aTokenRate;
+    address public aTokenAddress;
+
+    constructor(uint256 stakingAmountLimit_, uint256 minStakingAmount_, uint256 capacityLimitPercent_, 
+                uint256 claimRate_, uint256 aTokenClaimFee_, uint256 aTokenRate_, address tokenAddress_, 
+                address aTokenAddress_) StakingPoolV2(stakingAmountLimit_, minStakingAmount_, capacityLimitPercent_, tokenAddress_) public{
+        claimRate = claimRate_;
+        require(aTokenClaimFee_ < 10000, "claim fee error");
+        aTokenClaimFee = aTokenClaimFee_;
+        aTokenRate = aTokenRate_;
+        aTokenAddress = aTokenAddress_;
+    }
+
+    function totalClaimProductQuantity() view public virtual override returns(uint256){
+        return _totalClaimProductQuantity;
+    }
+
+    function queryAndCheckClaimAmount(address userAccount) view external virtual override returns(uint256,uint256/*token balance*/){
         require(claimEnable,"claim not enable");
         require(payAmount()>0,"no money for claim");
         uint256 productTokenQuantity = userClaimMap[userAccount];
         return (productTokenQuantity.mul(payAmount()),productTokenQuantity);
     }
+
+    function setClaimRate(uint256 claimRate_) onlyOwner public{
+        require(claimRate_>0 && claimRate_<=100,"claim rate error");
+        require(now < startTime(),"can not set rate");
+        claimRate = claimRate_;
+	}
+
+    function setATokenRate(uint256 aTokenRate_) onlyOwner public{
+        require(now < startTime(),"can not set rate");
+        aTokenRate =  aTokenRate_;
+    }
+
+    function claimStandardReached() view public returns(bool) {
+        return _totalClaimProductQuantity.mul(100).div(productToken.totalSellQuantity())>=claimRate;
+    }
+
+    function redeemFromClaim() nonReentrant whenNotPaused external {
+        require(!_isClosed || !productToken.needPay(),"can not redeemFromClaim");
+
+        uint256 productQuantity = userClaimMap[_msgSender()];
+        if(productQuantity > 0) {
+            uint256 aTokenAmount = calcATokenAmount(productQuantity.mul(productToken.paid())); //TODO
+            aTokenAddress.transferERC20(_msgSender(), aTokenAmount);
+            productToken.transfer(_msgSender(), productQuantity);
+            _totalClaimProductQuantity = _totalClaimProductQuantity.sub(productQuantity);
+            userClaimMap[_msgSender()] = 0;
+        }
+    }
+
+    function calcATokenAmount(uint256 totalPaidAmount) view public returns(uint256) {
+        return (totalPaidAmount.mul(aTokenRate).div(1e18)).mul(aTokenClaimFee.add(10000)).div(10000);
+    }
+
+    function pledgeForClaim(uint256 productQuantity, uint256 aTokenAmount) nonReentrant whenNotPaused external {
+        require(!_isClosed,"Staking pool has been closed");
+        require(startTime() <= now,"It hasn't started");
+        require(executeTime() > now,"can not pledge");
+
+        uint256 checkAmount = calcATokenAmount(productQuantity.mul(productToken.paid()));
+        require(checkAmount == aTokenAmount,"invalid cover amount");
+        aTokenAddress.transferFromERC20(_msgSender(), address(this), aTokenAmount);
+        productToken.transferFrom(_msgSender(), address(this), productQuantity);
+        userClaimMap[_msgSender()] = userClaimMap[_msgSender()].add(productQuantity);
+        _totalClaimProductQuantity = _totalClaimProductQuantity.add(productQuantity);
+    }
+
+    function returnRemainingAToken(address userAccount) onlyPoolToken nonReentrant whenNotPaused public virtual override {
+        uint256 totalRealPayAmount = _totalClaimProductQuantity.mul(payAmount());
+        uint256 totalNeedPayAmount = _totalClaimProductQuantity.mul(productToken.paid());
+        if(totalRealPayAmount < totalNeedPayAmount) {
+            uint256 totalLeftATokenAmount = calcATokenAmount(totalNeedPayAmount.sub(totalRealPayAmount));
+            uint256 claimQuantity = userClaimMap[userAccount];
+            uint256 aTokenAmount = totalLeftATokenAmount.mul(claimQuantity).div(_totalClaimProductQuantity);
+            if(aTokenAmount>0){
+                aTokenAddress.transferERC20(_msgSender(), aTokenAmount);
+            }
+        }
+        userClaimMap[userAccount] = 0;
+    }
+
+    function getAToken(uint256 userPayAmount, address userAccount) onlyPoolToken nonReentrant whenNotPaused public virtual override {
+        uint256 totalPayAmount = totalRealPayFromStaking();
+        uint256 totalATokenAmount = calcATokenAmount(_totalClaimProductQuantity.mul(payAmount()));
+        uint256 aTokenAmount = totalATokenAmount.mul(userPayAmount).div(totalPayAmount);
+        if(aTokenAmount>0){
+            aTokenAddress.transferERC20(userAccount, aTokenAmount);
+        }
+    }
+
 }
