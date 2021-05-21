@@ -93,7 +93,7 @@ contract NFTErc20Adapter is IUpgradable{
 
     using EnumerableMap for EnumerableMap.UintToUintMap;
 
-    mapping(string/*tokenName*/=>mapping(uint256/*expireTimestamp*/=>address)) public iERC20Tokens;
+    mapping(string/*tokenName*/=>mapping(uint256/*expireTimestamp*/=>address)) public iTokens;
     mapping(address/* user */ => mapping(address /* NFTContractAddress */=> EnumerableMap.UintToUintMap/*tokenId=>iTokenAmount*/))   nftKeys;
 
     mapping (address=>string/* tokenName */) public validNFTContracts;
@@ -121,19 +121,19 @@ contract NFTErc20Adapter is IUpgradable{
         return weightRadix.mul(weightNumeratorFactor).div(n.add(weightDenominatorFactor));
     }
 
-    function registerIERC20Token(address iERC20TokenAddress,string memory tokenName,uint256 expireTime) onlyOwner public{
+    function registerIToken(address iERC20TokenAddress,string memory tokenName,uint256 expireTime) onlyOwner public{
         require(IERC20Token(iERC20TokenAddress).minerMap(address(this)),"The iToken should add this as minter");
-        require(iERC20Tokens[tokenName][expireTime]==address(0),"The iToken exists");
-        iERC20Tokens[tokenName][expireTime]=iERC20TokenAddress;
+        require(iTokens[tokenName][expireTime]==address(0),"The iToken exists");
+        iTokens[tokenName][expireTime]=iERC20TokenAddress;
     }
 
-    function getIERC20Token(address NFTContract,uint256 tokenId) view public returns(address){
+    function getIToken(address NFTContract,uint256 tokenId) view public returns(address){
         string memory capitalTokenName=getNFTCapitalTokenName(NFTContract,tokenId);
         require(!checkString(capitalTokenName,""),"Invalid NFT contract");
 
         uint256 expireTimestamp=getNFTExpireTimestamp(NFTContract,tokenId);
         require(expireTimestamp>0,"Invalid NFT contract expire time");
-        return iERC20Tokens[capitalTokenName][expireTimestamp];
+        return iTokens[capitalTokenName][expireTimestamp];
     }
 
     function registerNFTContract(address NFTContract,string memory capitalTokenName) onlyOwner public {
@@ -198,7 +198,7 @@ contract NFTErc20Adapter is IUpgradable{
         return nftKeys[owner][NFTContract].length();
     }
 
-    function getIERC20BalanceOf(address NFTContract,uint256 tokenId) view public returns(uint256){
+    function getITokenBalanceOf(address NFTContract,uint256 tokenId) view public returns(uint256){
         NFTValuable nft=NFTValuable(NFTContract);
         (uint256 value,,,,)=nft.getTokenHolder(tokenId);
 
@@ -211,11 +211,11 @@ contract NFTErc20Adapter is IUpgradable{
     function pledgeNFT(address NFTContract,uint256 tokenId) public {
         require(ERC721(NFTContract).ownerOf(tokenId)==_msgSender(),"Not owner");
 
-        address iTokenAddress = getIERC20Token(NFTContract, tokenId);
+        address iTokenAddress = getIToken(NFTContract, tokenId);
         IERC20Token iToken=IERC20Token(iTokenAddress);
         require(address(iToken)!=address(0),"Unknown capital token name");
 
-        uint256 value=getIERC20BalanceOf(NFTContract,tokenId);
+        uint256 value=getITokenBalanceOf(NFTContract,tokenId);
         require(value>0,"NFT capital value is 0");
         ERC721(NFTContract).transferFrom(_msgSender(),address(this),tokenId);
         iToken.mint(_msgSender(),value);
@@ -237,7 +237,7 @@ contract NFTErc20Adapter is IUpgradable{
         uint256 expireTimestamp=getNFTExpireTimestamp(NFTContract,tokenId);
         require(expireTimestamp>0,"Invalid NFT contract expire time");
 
-        IERC20Token iToken=IERC20Token(iERC20Tokens[capitalTokenName][expireTimestamp]);
+        IERC20Token iToken=IERC20Token(iTokens[capitalTokenName][expireTimestamp]);
         require(address(iToken)!=address(0),"Unknown capital token name");
 
         uint256 iTokenAmount=nftKeys[_msgSender()][NFTContract].get(tokenId);

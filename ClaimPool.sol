@@ -390,8 +390,8 @@ contract ClaimPool is StakingPoolV2
 
     function pledgeForClaim(uint256 productQuantity, uint256 aTokenAmount) nonReentrant whenNotPaused external {
         require(!_isClosed,"Staking pool has been closed");
-        require(startTime() <= now,"It hasn't started");
-        require(executeTime() > now,"can not pledge");
+        require(now >= startTime(),"It hasn't started");
+        require(now < executeTime(),"can not pledge");
 
         uint256 checkAmount = calcATokenAmount(productQuantity.mul(productToken.paid()));
         require(checkAmount == aTokenAmount,"invalid cover amount");
@@ -409,7 +409,7 @@ contract ClaimPool is StakingPoolV2
             uint256 claimQuantity = userClaimMap[userAccount];
             uint256 aTokenAmount = totalLeftATokenAmount.mul(claimQuantity).div(_totalClaimProductQuantity);
             if(aTokenAmount>0){
-                aTokenAddress.transferERC20(_msgSender(), aTokenAmount);
+                aTokenAddress.transferERC20(userAccount, aTokenAmount);
             }
         }
         userClaimMap[userAccount] = 0;
