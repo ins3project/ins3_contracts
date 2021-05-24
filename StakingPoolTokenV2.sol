@@ -401,6 +401,10 @@ contract StakingPoolTokenV2 is ERC721, IUpgradable, ReentrancyGuard
         return _coinHolders.calcPremiumsRewards(tokenId);
     }
 
+    function isAllPoolsClosed(uint256 tokenId) view public returns(bool){
+        return _coinHolders.isAllPoolsClosed(tokenId);
+    }
+
 
 
     function getTokenHolder(uint256 tokenId) view public returns(uint256,uint256,uint256,uint256,address [] memory){   
