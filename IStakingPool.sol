@@ -59,6 +59,7 @@ interface IStakingPool
 interface IClaimPool is IStakingPool
 {
     function tokenAddress() external view returns(address);
+    function aTokenAddress() external view returns(address);
     function returnRemainingAToken(address account) external;
     function getAToken(uint256 userPayAmount, address account) external;
     function needPayFlag() external view returns(bool); 

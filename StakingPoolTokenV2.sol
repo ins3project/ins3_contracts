@@ -268,6 +268,7 @@ contract StakingPoolTokenV2 is ERC721, IUpgradable, ReentrancyGuard
         require(token.allowanceERC20(_msgSender(),address(this))>=amount,"No enough allowance for new token holder");
         token.transferFromERC20(_msgSender(),address(this),amount);
         
+        _tokenCount+=1;
         uint256 tokenId = _tokenCount;
         uint256 beginTimestamp = now;
         _coinHolders.set(tokenId,amount,/*maxAmount,*/beginTimestamp/*,coinName*/);
@@ -278,7 +279,7 @@ contract StakingPoolTokenV2 is ERC721, IUpgradable, ReentrancyGuard
             pool.putTokenHolder(tokenId,amount,beginTimestamp);
             _coinHolders.putTokenHolderInPool(addr,tokenId/*,amount*/);
         }
-        _tokenCount+=1;
+        
 
         _mint(_msgSender(),tokenId);
         emit NewTokenHolderCreated(tokenId);

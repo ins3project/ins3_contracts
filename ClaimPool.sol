@@ -28,6 +28,8 @@ contract StakingPoolV2 is IClaimPool, IUpgradable, ReentrancyGuard
     using CompatibleERC20 for address;
     address public override tokenAddress;
 
+    address public override aTokenAddress;
+
     uint256 [] public tokenHolderIds;  
 
 
@@ -333,7 +335,6 @@ contract ClaimPool is StakingPoolV2
     uint256 public aTokenClaimFee;
 
     uint256 public aTokenRate;
-    address public aTokenAddress;
 
     constructor(uint256 stakingAmountLimit_, uint256 minStakingAmount_, uint256 capacityLimitPercent_, 
                 uint256 claimRate_, uint256 aTokenClaimFee_, uint256 aTokenRate_, address tokenAddress_, 

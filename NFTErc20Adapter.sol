@@ -127,6 +127,11 @@ contract NFTErc20Adapter is IUpgradable{
         iTokens[tokenName][expireTime]=iERC20TokenAddress;
     }
 
+    function unregisterIToken(string memory tokenName,uint256 expireTime) onlyOwner public{
+        require(iTokens[tokenName][expireTime]!=address(0),"The iToken does not exist");
+        delete iTokens[tokenName][expireTime];
+    }
+
     function getIToken(address NFTContract,uint256 tokenId) view public returns(address){
         string memory capitalTokenName=getNFTCapitalTokenName(NFTContract,tokenId);
         require(!checkString(capitalTokenName,""),"Invalid NFT contract");
@@ -200,10 +205,10 @@ contract NFTErc20Adapter is IUpgradable{
 
     function getITokenBalanceOf(address NFTContract,uint256 tokenId) view public returns(uint256){
         NFTValuable nft=NFTValuable(NFTContract);
-        (uint256 value,,,,)=nft.getTokenHolder(tokenId);
+        (uint256 value,,,,address [] memory pools)=nft.getTokenHolder(tokenId);
 
         uint256 weight=getNFTValueWeight(NFTContract,tokenId);
-        assert(weight<=10000);
+        assert(weight<=pools.length.mul(10000));
         return value.mul(weight).div(10000) ;
     }
 
