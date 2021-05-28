@@ -332,16 +332,13 @@ contract ClaimPool is StakingPoolV2
 
     uint256 public claimRate;
 
-    uint256 public aTokenClaimFee;
 
     uint256 public aTokenRate;
 
     constructor(uint256 stakingAmountLimit_, uint256 minStakingAmount_, uint256 capacityLimitPercent_, 
-                uint256 claimRate_, uint256 aTokenClaimFee_, uint256 aTokenRate_, address tokenAddress_, 
+                uint256 claimRate_, uint256 aTokenRate_, address tokenAddress_, 
                 address aTokenAddress_) StakingPoolV2(stakingAmountLimit_, minStakingAmount_, capacityLimitPercent_, tokenAddress_) public{
         claimRate = claimRate_;
-        require(aTokenClaimFee_ < 10000, "claim fee error");
-        aTokenClaimFee = aTokenClaimFee_;
         aTokenRate = aTokenRate_;
         aTokenAddress = aTokenAddress_;
     }
@@ -386,7 +383,7 @@ contract ClaimPool is StakingPoolV2
     }
 
     function calcATokenAmount(uint256 totalPaidAmount) view public returns(uint256) {
-        return (totalPaidAmount.mul(aTokenRate).div(1e18)).mul(aTokenClaimFee.add(10000)).div(10000);
+        return totalPaidAmount.mul(aTokenRate).div(1e18);
     }
 
     function pledgeForClaim(uint256 productQuantity, uint256 aTokenAmount) nonReentrant whenNotPaused external {
