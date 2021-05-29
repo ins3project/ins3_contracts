@@ -177,6 +177,10 @@ contract NFTErc20Adapter is IUpgradable{
         NFTValuable nft=NFTValuable(NFTContract);
         (,,,,address [] memory pools)=nft.getTokenHolder(tokenId);
 
+        return getPoolsValueWeight(NFTContract,pools);
+    }
+
+    function getPoolsValueWeight(address NFTContract,address [] memory pools) view public returns(uint256){
         string memory capitalTokenName=validNFTContracts[NFTContract];
         bool isV2=checkString(capitalTokenName,"*");
         if (isV2){
