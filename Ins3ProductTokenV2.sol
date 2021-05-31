@@ -41,9 +41,6 @@ contract Ins3ProductTokenV2 is Ins3ProductTokenBaseV2
         uint256 allowance=erc20Token.allowanceERC20(_msgSender(),address(this));
         
         require(allowance>=amount,"allowance is not enough for calling buy()");
-        if (!_checkBuyAvailable(priceNodePublicKey,quantity,price,expiresAt,_v,_r,_s)){
-            return false;
-        }
         erc20Token.transferFromERC20(_msgSender(),address(this),amount); 
 
         return _buy(amount,priceNodePublicKey,quantity,price,expiresAt,_v,_r,_s);

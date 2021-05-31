@@ -132,9 +132,8 @@ abstract contract Ins3ProductTokenBaseV2 is ERC20,IUpgradable
     }
 
 	function _buy(uint256 amount,address priceNodePublicKey, uint256 quantity, uint256 price, uint256 expiresAt, uint8 v, bytes32 r, bytes32 s) internal returns(bool) {
-        if (!_checkBuyAvailable(priceNodePublicKey,quantity,price,expiresAt,v,r,s)){
-            return false;
-        }
+        require(_checkBuyAvailable(priceNodePublicKey,quantity,price,expiresAt,v,r,s));
+
 		_mint(_msgSender(), quantity);
 		
 		totalPremiums = totalPremiums.add(amount);
