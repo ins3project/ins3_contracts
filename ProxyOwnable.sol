@@ -63,6 +63,11 @@ abstract contract ProxyOwnable is Context{
         return _ownable.owner();
     }
 
+    function getOwner() view external returns(address){
+        require(address(_ownable)!=address(0),"proxy ownable should not be 0");
+        return _ownable.owner();
+    }
+
     function isOwner(address addr) public view returns(bool){
         require(address(_ownable)!=address(0),"proxy ownable should not be 0");
         return _ownable.isOwner(addr);
