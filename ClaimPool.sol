@@ -370,6 +370,7 @@ contract ClaimPool is StakingPoolV2
     }
 
     function redeemFromClaim() nonReentrant whenNotPaused external {
+        require(!needPayFlag,"can not redeemFromClaim");
         require(!_isClosed || !productToken.needPay(),"can not redeemFromClaim");
 
         uint256 productQuantity = userClaimMap[_msgSender()];
