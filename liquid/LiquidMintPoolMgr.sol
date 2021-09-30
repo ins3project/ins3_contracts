@@ -76,13 +76,11 @@ contract LiquidMintPoolMgr is IUpgradable, IERC777Recipient {
 
   constructor(
         address ERC1820Register_,
-        address itfTokenHolder_,
         uint256 itfSupply_,
         uint256 tokenPerSecond_,
         uint256 startBlock_,
         address ownable_
     ) public {
-        itfTokenHolder = itfTokenHolder_;
         itfSupply = itfSupply_;
         itfBalance = itfSupply_;
         tokenPerSecond = tokenPerSecond_; 
@@ -103,6 +101,8 @@ contract LiquidMintPoolMgr is IUpgradable, IERC777Recipient {
         address priceMetaInfoDbAddress = register.getContract("MIDB");
         _priceMetaInfoDb=PriceMetaInfoDB(priceMetaInfoDbAddress);
         require(priceMetaInfoDbAddress!=address(0),"Null for MIDB");
+
+        itfTokenHolder = register.getContract("ITFH");
     }
 
     function poolsCount() external view returns (uint256) {
@@ -267,7 +267,7 @@ contract LiquidMintPoolMgr is IUpgradable, IERC777Recipient {
         itfBalance=itfBalance.add(amount);
     }
 
-    function _getPoolReward(uint256 poolLastRewardBlock_, uint256 poolAllocPoint_) internal view returns(uint256) {
+    function _getPoolReward(uint256 poolLastRewardBlock_, uint256 poolAllocPoint_) public view returns(uint256) {
         return block.number.sub(poolLastRewardBlock_).mul(_priceMetaInfoDb.blockTime()).mul(tokenPerSecond).div(1000)
           .mul(poolAllocPoint_).div(totalAllocPoint);
     }

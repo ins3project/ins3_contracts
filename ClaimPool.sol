@@ -76,6 +76,11 @@ contract StakingPoolV2 is IClaimPool, IUpgradable, ReentrancyGuard
 
     }
 
+    function setStakingAmountLimit(uint256 stakingAmountLimit_) onlyOwner public{
+        require(stakingAmountLimit_ > _totalStakingAmount);
+        stakingAmountLimit=stakingAmountLimit_;
+    }
+
     function setStakingWeight(uint256 stakingWeight_) onlyOwner public{
         stakingWeight=stakingWeight_;
     }
@@ -363,6 +368,11 @@ contract ClaimPool is StakingPoolV2
     function setATokenRate(uint256 aTokenRate_) onlyOwner public{
         require(now < startTime(),"can not set rate");
         aTokenRate =  aTokenRate_;
+    }
+
+    function setATokenAddress(address aTokenAddress_) onlyOwner public{
+        require(now < startTime(),"can not set atoken address");
+        aTokenAddress =  aTokenAddress_;
     }
 
     function claimStandardReached() view public returns(bool) {

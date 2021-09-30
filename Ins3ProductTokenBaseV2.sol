@@ -146,6 +146,7 @@ abstract contract Ins3ProductTokenBaseV2 is ERC20,IUpgradable
 
 
     function _checkWithdrawAvailable(address priceNodePublicKey, uint256 quantity, uint256 price, uint256 expiresAt, uint8 v, bytes32 r, bytes32 s) view internal returns(bool){
+        require(now < expireTimestamp,"The proudct has expired");
 		require(isValid,"the product has been closed");
 		uint256 userQuantity = balanceOf(_msgSender());
 		require(quantity<=userQuantity,"invalid withdraw quantity");
